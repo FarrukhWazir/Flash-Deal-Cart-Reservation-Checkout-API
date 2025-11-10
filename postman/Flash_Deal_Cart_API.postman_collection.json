@@ -1,0 +1,118 @@
+{
+  "info": {
+    "name": "Flash Deal Cart API",
+    "description": "API collection for Flash Deal Cart with Prisma and Redis",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "products"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Limited Edition Watch\",\n  \"description\": \"Exclusive flash deal watch\",\n  \"price\": 299.99,\n  \"totalStock\": 100\n}"
+            },
+            "description": "Create a new product with initial stock"
+          }
+        },
+        {
+          "name": "Get Product Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/:productId/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "products", ":productId", "status"],
+              "variable": [
+                { "key": "productId", "value": "1", "description": "ID of the product" }
+              ]
+            },
+            "description": "Get current stock status of a product"
+          }
+        },
+        {
+          "name": "Reserve Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/:productId/reserve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "products", ":productId", "reserve"],
+              "variable": [
+                { "key": "productId", "value": "1", "description": "ID of the product" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user123\",\n  \"quantity\": 2\n}"
+            },
+            "description": "Reserve product(s) for a user (10-minute TTL)"
+          }
+        },
+        {
+          "name": "Cancel Reservation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/:productId/reserve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "products", ":productId", "reserve"],
+              "variable": [
+                { "key": "productId", "value": "1", "description": "ID of the product" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user123\"\n}"
+            },
+            "description": "Cancel a product reservation before expiry"
+          }
+        },
+        {
+          "name": "Checkout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/:productId/checkout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "products", ":productId", "checkout"],
+              "variable": [
+                { "key": "productId", "value": "1", "description": "ID of the product" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user123\"\n}"
+            },
+            "description": "Complete the purchase of reserved product(s)"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000", "type": "string" }
+  ]
+}

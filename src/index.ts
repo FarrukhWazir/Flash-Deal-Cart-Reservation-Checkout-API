@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
-import { AppDataSource } from './config/database';
+import prisma from './config/prisma';
 import redisClient from './config/redis';
 import productRoutes from './routes/productRoutes';
 
@@ -22,8 +22,9 @@ app.use('/api', productRoutes);
 // Initialize database and Redis connections
 const initialize = async () => {
   try {
-    await AppDataSource.initialize();
-    console.log('Database connected successfully');
+    // Prisma handles connection lazily; connect explicitly to validate connection
+    await prisma.$connect();
+    console.log('Database (Prisma) connected successfully');
 
     await redisClient.connect();
     console.log('Redis connected successfully');

@@ -1,6 +1,5 @@
-import { Repository } from 'typeorm';
-import { AppDataSource } from '../config/database';
-import { Product } from '../models/Product';
+import prisma from '../config/prisma';
+import type { Prisma } from '@prisma/client';
 import redisClient from '../config/redis';
 import dotenv from 'dotenv';
 
@@ -9,25 +8,21 @@ dotenv.config();
 const CART_RESERVATION_TTL = parseInt(process.env.CART_RESERVATION_TTL || '600');
 
 export class ProductService {
-  private productRepository: Repository<Product>;
+  constructor() {}
 
-  constructor() {
-    this.productRepository = AppDataSource.getRepository(Product);
-  }
-
-  async createProduct(productData: Partial<Product>): Promise<Product> {
-    const product = this.productRepository.create(productData);
-    return await this.productRepository.save(product);
-  }
-
-  async getProductStatus(productId: number): Promise<{
+  async createProduct(productData: {
+    name: string;
+    description: string;
+    price: number | string;
     totalStock: number;
-    reservedStock: number;
-    availableStock: number;
-  }> {
-    const product = await this.productRepository.findOneOrFail({
-      where: { id: productId }
-    });
+  }) {
+    const product = await prisma.product.create({ data: productData as any });
+    return product;
+  }
+
+  async getProductStatus(productId: number): Promise<{ totalStock: number; reservedStock: number; availableStock: number }> {
+    const product = await prisma.product.findUnique({ where: { id: productId } });
+    if (!product) throw new Error('Product not found');
 
     const reservedStockStr = await redisClient.get(`reserved:${productId}`);
     const reservedStock = parseInt(reservedStockStr || '0');
@@ -40,95 +35,75 @@ export class ProductService {
   }
 
   async reserveProduct(productId: number, userId: string, quantity: number): Promise<boolean> {
-    // Start a Redis transaction
-    const multi = redisClient.multi();
-
     const reservationKey = `reserved:${productId}`;
     const userReservationKey = `user:${userId}:product:${productId}`;
 
-    try {
-      // Get current product details
-      const product = await this.productRepository.findOneOrFail({
-        where: { id: productId }
-      });
+    // Use Redis transaction to atomically increment reserved count and set user reservation with TTL
+    const currentReserved = parseInt((await redisClient.get(reservationKey)) || '0');
 
-      // Get current reserved quantity
-      const currentReserved = parseInt(await redisClient.get(reservationKey) || '0');
-      
-      // Check if there's enough stock available
-      if (product.totalStock - currentReserved < quantity) {
-        return false;
-      }
+    const product = await prisma.product.findUnique({ where: { id: productId } });
+    if (!product) throw new Error('Product not found');
 
-      // Add reservation
-      multi.incrBy(reservationKey, quantity);
-      multi.set(userReservationKey, quantity.toString(), {
-        EX: CART_RESERVATION_TTL
-      });
-
-      await multi.exec();
-      return true;
-    } catch (error) {
-      await multi.discard();
-      throw error;
+    if (product.totalStock - currentReserved < quantity) {
+      return false;
     }
+
+    const multi = redisClient.multi();
+    multi.incrBy(reservationKey, quantity);
+    multi.set(userReservationKey, quantity.toString(), { EX: CART_RESERVATION_TTL });
+    await multi.exec();
+    return true;
   }
 
   async cancelReservation(productId: number, userId: string): Promise<boolean> {
     const reservationKey = `reserved:${productId}`;
     const userReservationKey = `user:${userId}:product:${productId}`;
 
+    const reservedQuantity = await redisClient.get(userReservationKey);
+    if (!reservedQuantity) return false;
+
     const multi = redisClient.multi();
-
-    try {
-      const reservedQuantity = await redisClient.get(userReservationKey);
-      if (!reservedQuantity) return false;
-
-      multi.decrBy(reservationKey, parseInt(reservedQuantity));
-      multi.del(userReservationKey);
-
-      await multi.exec();
-      return true;
-    } catch (error) {
-      await multi.discard();
-      return false;
-    }
+    multi.decrBy(reservationKey, parseInt(reservedQuantity));
+    multi.del(userReservationKey);
+    await multi.exec();
+    return true;
   }
 
   async checkout(productId: number, userId: string): Promise<boolean> {
     const reservationKey = `reserved:${productId}`;
     const userReservationKey = `user:${userId}:product:${productId}`;
 
-    const queryRunner = AppDataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    const reservedQuantity = await redisClient.get(userReservationKey);
+    if (!reservedQuantity) return false;
+    const quantity = parseInt(reservedQuantity);
 
+    // Use a Prisma transaction to decrement stock and create an order atomically
     try {
-      const reservedQuantity = await redisClient.get(userReservationKey);
-      if (!reservedQuantity) return false;
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const product = await tx.product.findUnique({ where: { id: productId } });
+        if (!product) throw new Error('Product not found');
+        if (product.totalStock < quantity) throw new Error('Insufficient stock');
 
-      const quantity = parseInt(reservedQuantity);
+        await tx.product.update({ where: { id: productId }, data: { totalStock: product.totalStock - quantity } });
 
-      // Update product stock
-      const product = await queryRunner.manager.findOneOrFail(Product, {
-        where: { id: productId },
-        lock: { mode: 'pessimistic_write' }
+        await tx.order.create({
+          data: {
+            userId,
+            productId,
+            quantity,
+            totalPrice: (product.price as any) * quantity,
+            status: 'completed'
+          }
+        });
       });
 
-      product.totalStock -= quantity;
-      await queryRunner.manager.save(product);
-
-      // Clear reservation
+      // Clear reservation in Redis
       await redisClient.del(userReservationKey);
       await redisClient.decrBy(reservationKey, quantity);
-
-      await queryRunner.commitTransaction();
       return true;
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
+    } catch (e) {
+      console.error('Checkout error:', e);
       return false;
-    } finally {
-      await queryRunner.release();
     }
   }
 }

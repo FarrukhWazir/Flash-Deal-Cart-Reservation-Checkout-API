@@ -1,25 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
-
-@Entity('products')
-export class Product {
-  @PrimaryGeneratedColumn()
+// Prisma is used for DB models. Keep a TypeScript type for Product to help with typing in the codebase.
+export type Product = {
   id: number;
-
-  @Column()
   name: string;
-
-  @Column('text')
   description: string;
-
-  @Column('decimal', { precision: 10, scale: 2 })
-  price: number;
-
-  @Column('int')
+  price: number | string;
   totalStock: number;
-
-  @CreateDateColumn()
   createdAt: Date;
-
-  @UpdateDateColumn()
   updatedAt: Date;
-}
+};

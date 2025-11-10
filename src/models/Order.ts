@@ -1,34 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
-import { Product } from './Product';
-
-@Entity('orders')
-export class Order {
-  @PrimaryGeneratedColumn()
+// Prisma is used for DB models. Keep a TypeScript type for Order to help with typing in the codebase.
+export type Order = {
   id: number;
-
-  @Column()
   userId: string;
-
-  @ManyToOne(() => Product)
-  @JoinColumn()
-  product: Product;
-
-  @Column()
   productId: number;
-
-  @Column('int')
   quantity: number;
-
-  @Column('decimal', { precision: 10, scale: 2 })
-  totalPrice: number;
-
-  @Column({
-    type: 'enum',
-    enum: ['pending', 'completed', 'cancelled'],
-    default: 'pending'
-  })
+  totalPrice: number | string;
   status: 'pending' | 'completed' | 'cancelled';
-
-  @CreateDateColumn()
   createdAt: Date;
-}
+};

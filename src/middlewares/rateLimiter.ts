@@ -18,7 +18,7 @@ export const rateLimiterMiddleware = async (
   next: NextFunction
 ) => {
   try {
-    await rateLimiter.consume(req.ip);
+    await rateLimiter.consume(req.ip || req.socket.remoteAddress || 'unknown');
     next();
   } catch (error) {
     res.status(429).json({
